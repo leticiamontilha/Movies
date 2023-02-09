@@ -85,7 +85,7 @@ export const listMovies = async (request: Request, response: Response): Promise<
 
     const objPag = {
         previousPage: page -1 < 1 ? null : `${baseUrl}?page=${page -1}&perPage=${perPage}`,
-        nextPage: `${baseUrl}?page=${page +1}&perPage=${perPage}`,
+        nextPage: queryResult.rows.length < 5 ? null : `${baseUrl}?page=${page +1}&perPage=${perPage}`,
         count: queryResult.rowCount,
         data: queryResult.rows
     }
