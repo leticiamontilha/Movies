@@ -1,5 +1,6 @@
 import { Request, Response } from "express";
 import { QueryConfig } from "pg";
+import  format from "pg-format";
 import { client } from "./database";
 import { Imovie, IMovieRequest, MoviesResult } from "./interfaces";
 
@@ -17,7 +18,7 @@ export const createMovie = async (request: Request, response: Response): Promise
 
     const queryConfig: QueryConfig = {
         text: queryString,
-        values: Object.values(movieDataRequest)
+        values: [movieDataRequest.name, movieDataRequest.description, movieDataRequest.duration, movieDataRequest.price]
     }
 
     const queryResult: MoviesResult = await client.query(queryConfig)
@@ -29,34 +30,67 @@ export const createMovie = async (request: Request, response: Response): Promise
 
 export const listMovies = async (request: Request, response: Response): Promise<Response> => {
     
-    let perPage: any = request.query.per_page === undefined ? 5 : request.query.per_page
-    let page: any = request.query.page === undefined ? 1 : request.query.page
-    
-    if (page <= 0 || perPage <= 0){
+    let perPage: number = Number(request.query.perPage) || 5
+    let page: number = Number(request.query.page) || 1 
+
+    if (page <= 0 || typeof page !== "number"){
         page = 1
+    }
+
+    if( perPage <= 0 || typeof perPage !== "number" || perPage > 5 ){
         perPage = 5
     }
 
-    if (perPage > 5) {
-        perPage = 5
-    }
-
-   
-    const queryString: string = `
+    let queryString: string = `
         SELECT  
         *
         FROM  
             movies
         LIMIT $1 OFFSET $2;
         `
-    const queryConfig: QueryConfig = {
+    let queryConfig: QueryConfig = {
         text: queryString,
-        values: [perPage, page]
+        values: [perPage, perPage * (page -1)]
+    }
+
+    if(request.query.sort === "duration" || request.query.sort === "price"){
+        let order = "asc"
+
+        if(request.query.order === "desc"){
+            order = "desc"
+        }
+
+        queryString = format(
+            `
+            SELECT  
+            *
+            FROM  
+                movies
+            ORDER BY %I %s
+            LIMIT $1 OFFSET $2;
+            `,
+            request.query.sort, 
+            order
+        )
+
+        queryConfig = {
+        text: queryString,
+        values: [perPage, perPage * (page -1)]
+        }
     }
 
     const queryResult: MoviesResult = await client.query(queryConfig)
+
+    const baseUrl = "http://localhost:3000/movies"
+
+    const objPag = {
+        previousPage: page -1 < 1 ? null : `${baseUrl}?page=${page -1}&perPage=${perPage}`,
+        nextPage: `${baseUrl}?page=${page +1}&perPage=${perPage}`,
+        count: queryResult.rowCount,
+        data: queryResult.rows
+    }
     
-    return response.status(200).json(queryResult.rows)
+    return response.status(200).json(objPag)
 }
 
 export const updateMovie = async (request: Request, response:Response): Promise<Response> => {
